@@ -2,28 +2,46 @@
 
 import socket
 import sys
+import vlc
+
+player = vlc.MediaPlayer("/home/pi/REPOS/ricknmorty/server/screaming_sun.mp3")
+sunsRising = vlc.MediaPlayer("/home/pi/REPOS/ricknmorty/server/suns_rising.mp3")
 
 sock = socket.socket()
-print "socket successfully created"
+
+def displayMessage(message):
+    print(message)
+    file.write(message + '\n')
+    file.flush()
+
+file = open("/home/pi/Desktop/log.txt", "w")
+
+displayMessage("socket successfully created")
 
 sock.bind(('', 3001))
-sock.listen(2)
+sock.listen(1)
 
-print 'listening for packets'
-
+displayMessage('listening for packets')
 while True:
     connection, client_address = sock.accept()
     connection.send('packet received')
 
     try:
-        print 'connected to: ', client_address
+        sunsRising.play()
+        displayMessage('connected to: ' + str(client_address))
         while True:
             data = connection.recv(32)
-            print >>sys.stderr, 'received "%s"' % data
+            displayMessage('received ' + str(data))
             if data:
-                print >>sys.stderr, 'Data received'
+                displayMessage('data received\n')
+                if data == 'open':
+                    player.play()
+                elif data == 'close':
+                    player.stop()
             else:
-                print >>sys.stderr, 'no more data from', client_address
+                displayMessage('no more data from ' + str(client_address))
                 break
     finally:
+        displayMessage('closing')
         connection.close()
+        file.close()
