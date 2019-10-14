@@ -2,16 +2,19 @@
 
 #ifndef STASSID
 #define STASSID "1does not simply connect to wifi"
-#define STAPSK  "freckles1"
+#define STAPSK "freckles1"
 #endif
 
-const char* ssid     = STASSID;
-const char* password = STAPSK;
+const char *ssid = STASSID;
+const char *password = STAPSK;
 
-const char* host = "192.128.0.17";
-const uint16_t port = 6789;
+const char *host = "192.168.0.17";
+const uint16_t port = 3001;
+const int SENS_PIN = 0;
+const int DEBOUNCE = 150;
 
-void setup() {
+void setup()
+{
   Serial.begin(115200);
 
   // We start by connecting to a WiFi network
@@ -27,7 +30,8 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     Serial.print(".");
   }
@@ -36,28 +40,76 @@ void setup() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+
+  pinMode(SENS_PIN, INPUT_PULLUP);
 }
 
-void loop() {
-  Serial.print("connecting to ");
-  Serial.print(host);
-  Serial.print(':');
-  Serial.println(port);
+WiFiClient client;
+int prev_state = 0;
+int edge;
+void loop()
+{ 
+  if (!client.connected())
+  {
+    Serial.print("connecting to ");
+    Serial.print(host);
+    Serial.print(':');
+    Serial.println(port);
 
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  if (!client.connect(host, port)) {
-    Serial.println("connection failed");
-    delay(5000);
-    return;
+    // Use WiFiClient class to create TCP connections
+    if (!client.connect(host, port))
+    {
+      Serial.println("connection failed");
+      delay(5000);
+      return;
+    }else{
+      Serial.println("connected to server");
+      prev_state = digitalRead(SENS_PIN); 
+    }
   }
+  else
+  {
+    int hi=0;
+    int lo=0;
+    boolean rising = false;
+    boolean falling = false;
+    //debounce
+    if(digitalRead(SENS_PIN) != prev_state)
+    {
+      if(digitalRead(SENS_PIN))
+      {
+        hi++;
+      }else{
+        lo++;
+      }
+      delay(1);
+      
+      if(hi>DEBOUNCE)
+      {
+        rising = true;
+        prev_state = 1;
+      }else{
+        if(lo>DEBOUNCE)
+        {
+          falling = true;
+          prev_state = 0;
+        }
+      }
+    }
 
-  // This will send a string to the server
-  Serial.println("sending data to server");
-  if (client.connected()) {
-    client.println("hello from ESP8266");
+    // if ((digitalRead(SENS_PIN) == 0) &&(prev_state == 1))//falling edge
+    // {
+    //   while(digitalRead(SENS_PIN) == 0)
+    //   {
+    //     delay(1);
+    //   }
+    //   // This will send a string to the server
+    //   Serial.println("sending data to server");
+    //   if (client.connected())
+    //   {
+    //     client.println("open");
+    //   }
+    //   delay(1000);
+    // }
   }
-
-
-  delay(10000); // execute once every 5 minutes, don't flood remote service
 }
