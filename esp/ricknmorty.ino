@@ -48,7 +48,7 @@ WiFiClient client;
 int prev_state = 0;
 int edge;
 void loop()
-{ 
+{
   if (!client.connected())
   {
     Serial.print("connecting to ");
@@ -62,54 +62,72 @@ void loop()
       Serial.println("connection failed");
       delay(5000);
       return;
-    }else{
+    }
+    else
+    {
       Serial.println("connected to server");
-      prev_state = digitalRead(SENS_PIN); 
+      prev_state = digitalRead(SENS_PIN);
     }
   }
   else
   {
-    int hi=0;
-    int lo=0;
+    int hi = 0;
+    int lo = 0;
     boolean rising = false;
     boolean falling = false;
     //debounce
-    if(digitalRead(SENS_PIN) != prev_state)
+    if (digitalRead(SENS_PIN) != prev_state)
     {
-      if(digitalRead(SENS_PIN))
+      while (!rising && !falling)
       {
-        hi++;
-      }else{
-        lo++;
-      }
-      delay(1);
-      
-      if(hi>DEBOUNCE)
-      {
-        rising = true;
-        prev_state = 1;
-      }else{
-        if(lo>DEBOUNCE)
+        if (digitalRead(SENS_PIN))
         {
-          falling = true;
-          prev_state = 0;
+          hi++;
+        }
+        else
+        {
+          lo++;
+        }
+        delay(1);
+
+        if (hi > DEBOUNCE)
+        {
+          Serial.print("rising edge");
+          rising = true;
+          prev_state = 1;
+        }
+        else
+        {
+          if (lo > DEBOUNCE)
+          {
+            Serial.print("falling edge");
+            falling = true;
+            prev_state = 0;
+          }
         }
       }
     }
 
-    // if ((digitalRead(SENS_PIN) == 0) &&(prev_state == 1))//falling edge
-    // {
-    //   while(digitalRead(SENS_PIN) == 0)
-    //   {
-    //     delay(1);
-    //   }
-    //   // This will send a string to the server
-    //   Serial.println("sending data to server");
-    //   if (client.connected())
-    //   {
-    //     client.println("open");
-    //   }
-    //   delay(1000);
-    // }
+    if (rising)
+    {
+      // This will send a string to the server
+      Serial.println("sending data to server");
+      if (client.connected())
+      {
+        client.println("open");
+      }
+    }
+    else
+    {
+      if (falling)
+      {
+        // This will send a string to the server
+        Serial.println("sending data to server");
+        if (client.connected())
+        {
+          client.println("close");
+        }
+      }
+    }
   }
 }
