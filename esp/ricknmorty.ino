@@ -10,7 +10,7 @@ const char *password = STAPSK;
 
 const char *host = "192.168.0.17";
 const uint16_t port = 3001;
-const int SENS_PIN = 0;
+const int SENS_PIN = 12;
 const int DEBOUNCE = 150;
 
 void setup()
