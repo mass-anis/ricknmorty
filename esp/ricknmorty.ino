@@ -1,4 +1,5 @@
 #include <ESP8266WiFi.h>
+#include <Ticker.h>
 
 #ifndef STASSID
 #define STASSID "1does not simply connect to wifi"
@@ -10,8 +11,23 @@ const char *password = STAPSK;
 
 const char *host = "192.168.0.17";
 const uint16_t port = 3001;
-const int SENS_PIN = 12;
+
+const int LED_PIN  = 2; //On board LED
+const int SENS_PIN = 12; //reed switch
+const int ZC_PIN = 4; //Zero crossing pin
+const int TRIAC_PIN = 5; //PWM pin
+
+const int TMR1_US = 5; // timer count for 1us
+const int SIG_PERIOD = (TMR1_US*16666); // 60Hz period in timer ticks
+const int TRIG_PERIOD = (TMR1_US*100); //width of the triac trigger signal 
 const int DEBOUNCE = 150;
+int dimTmrPeriod = 0;
+
+
+
+void ICACHE_RAM_ATTR onTimerISR();
+void ICACHE_RAM_ATTR onZeroCrosssingISR();
+
 
 void setup()
 {
@@ -42,6 +58,59 @@ void setup()
   Serial.println(WiFi.localIP());
 
   pinMode(SENS_PIN, INPUT_PULLUP);
+  pinMode(ZC_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(TRIAC_PIN, OUTPUT);
+
+  //Initialize Ticker every 0.5s
+  timer1_attachInterrupt(onTimerISR);
+  timer1_enable(TIM_DIV16, TIM_EDGE, TIM_SINGLE);
+
+  attachInterrupt(ZC_PIN, onZeroCrosssingISR, RISING);
+}
+
+/**
+ * @brief calculates the timer offset period from the ZC signal that corresponds to the 
+ * % level. the % is mapped to the signal period not the light inrensity
+ * 
+ * @param level %
+ * @return int timer offset that corresponds to the % level
+ */
+int calcDimTimerPeriod(int level)
+{
+  int tmr;
+  tmr = level*SIG_PERIOD/100;
+  return tmr;
+}
+
+/**
+ * @brief ZC interrupt used to sync the triac control signal to the main AC
+ * in this function start the timer to do the main delay from the ZC start
+ */
+void ICACHE_RAM_ATTR onZeroCrosssingISR()
+{
+  timer1_write(dimTmrPeriod);
+}
+
+/**
+ * @brief timer ISR, this function generate the trigger signal for the triac
+ * it rearms the timer for the trigger width then stops
+ * the timer will get started again on the next ZC interrupt
+ */
+void ICACHE_RAM_ATTR onTimerISR()
+{
+  static boolean trig = true;
+  if(trig)
+  {
+    digitalWrite(LED_PIN, 1); 
+    timer1_write(TRIG_PERIOD);
+    trig = false;
+  }else{
+    digitalWrite(LED_PIN, 0);
+    trig = true;
+  }
+  // digitalWrite(LED_PIN, !digitalRead(LED_PIN)); 
+  //   timer1_write(TRIG_PERIOD);
 }
 
 WiFiClient client;
@@ -49,6 +118,7 @@ int prev_state = 0;
 int edge;
 void loop()
 {
+  dimTmrPeriod = calcDimTimerPeriod(20);
   if (!client.connected())
   {
     Serial.print("connecting to ");
@@ -69,7 +139,7 @@ void loop()
       prev_state = digitalRead(SENS_PIN);
     }
   }
-  else
+  else //client connected
   {
     int hi = 0;
     int lo = 0;
