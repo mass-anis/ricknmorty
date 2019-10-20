@@ -12,22 +12,24 @@ const char *password = STAPSK;
 const char *host = "192.168.0.17";
 const uint16_t port = 3001;
 
-const int LED_PIN  = 2; //On board LED
+const int LED_PIN = 2;   //On board LED
 const int SENS_PIN = 12; //reed switch
-const int ZC_PIN = 4; //Zero crossing pin
+const int ZC_PIN = 4;    //Zero crossing pin
 const int TRIAC_PIN = 5; //PWM pin
 
-const int TMR1_US = 5; // timer count for 1us
-const int SIG_PERIOD = (TMR1_US*16666); // 60Hz period in timer ticks
-const int TRIG_PERIOD = (TMR1_US*100); //width of the triac trigger signal 
+const int TMR1_US = 5;                   // timer count for 1us
+const int SIG_PERIOD = (TMR1_US * 8333); // 60Hz period in timer ticks
+const int TRIG_PERIOD = (TMR1_US * 100); //width of the triac trigger signal
 const int DEBOUNCE = 150;
-int dimTmrPeriod = 0;
-
-
+const int DIM_STEP_DELAY = 100; //delay in ms between dimmer level steps in 1%
+const int DIM_STEP = 1;
+const int DIM_START_LEVEL = 6;
+const int DIM_STOP_LEVEL = 97;
+int dimLevel = 0;
+//int dimTmrPeriod = 0;
 
 void ICACHE_RAM_ATTR onTimerISR();
 void ICACHE_RAM_ATTR onZeroCrosssingISR();
-
 
 void setup()
 {
@@ -79,7 +81,17 @@ void setup()
 int calcDimTimerPeriod(int level)
 {
   int tmr;
-  tmr = level*SIG_PERIOD/100;
+  if(level > DIM_STOP_LEVEL)
+  {
+    level = DIM_STOP_LEVEL;
+  }
+
+  if(level <DIM_START_LEVEL)
+  {
+    level = DIM_START_LEVEL;
+  }
+
+  tmr = (SIG_PERIOD)- (level * SIG_PERIOD / 100);
   return tmr;
 }
 
@@ -89,7 +101,18 @@ int calcDimTimerPeriod(int level)
  */
 void ICACHE_RAM_ATTR onZeroCrosssingISR()
 {
-  timer1_write(dimTmrPeriod);
+  if(dimLevel == 100)
+  {
+    digitalWrite(LED_PIN, 1);
+    digitalWrite(TRIAC_PIN, 1);
+  }
+  else if(dimLevel == 0)
+  {
+    digitalWrite(LED_PIN, 0);
+    digitalWrite(TRIAC_PIN, 0);
+  }else{
+    timer1_write(calcDimTimerPeriod(dimLevel));
+  }
 }
 
 /**
@@ -100,25 +123,31 @@ void ICACHE_RAM_ATTR onZeroCrosssingISR()
 void ICACHE_RAM_ATTR onTimerISR()
 {
   static boolean trig = true;
-  if(trig)
+  if (trig)
   {
-    digitalWrite(LED_PIN, 1); 
+    digitalWrite(LED_PIN, 1);
+    digitalWrite(TRIAC_PIN, 1);
     timer1_write(TRIG_PERIOD);
     trig = false;
-  }else{
+  }
+  else
+  {
     digitalWrite(LED_PIN, 0);
+    digitalWrite(TRIAC_PIN, 0);
     trig = true;
   }
-  // digitalWrite(LED_PIN, !digitalRead(LED_PIN)); 
+  // digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   //   timer1_write(TRIG_PERIOD);
 }
 
 WiFiClient client;
 int prev_state = 0;
 int edge;
+int dimTimer = 0;
+boolean start = false;
+
 void loop()
 {
-  dimTmrPeriod = calcDimTimerPeriod(20);
   if (!client.connected())
   {
     Serial.print("connecting to ");
@@ -162,7 +191,7 @@ void loop()
 
         if (hi > DEBOUNCE)
         {
-          Serial.print("rising edge");
+          Serial.println("rising edge");
           rising = true;
           prev_state = 1;
         }
@@ -170,7 +199,7 @@ void loop()
         {
           if (lo > DEBOUNCE)
           {
-            Serial.print("falling edge");
+            Serial.println("falling edge");
             falling = true;
             prev_state = 0;
           }
@@ -181,10 +210,12 @@ void loop()
     if (rising)
     {
       // This will send a string to the server
-      Serial.println("sending data to server");
+      //Serial.println("sending data to server");
       if (client.connected())
       {
         client.println("open");
+        dimLevel = 0;
+        start = true;
       }
     }
     else
@@ -192,10 +223,27 @@ void loop()
       if (falling)
       {
         // This will send a string to the server
-        Serial.println("sending data to server");
+        //Serial.println("sending data to server");
         if (client.connected())
         {
           client.println("close");
+          start = false;
+          dimLevel = 0;
+        }
+      }
+    }
+
+    //progressive lighting
+    if (start)
+    {
+      if ((millis() - dimTimer) > DIM_STEP_DELAY)
+      {
+        dimTimer = millis();
+        dimLevel += DIM_STEP;
+        if (dimLevel > 100)
+        {
+          dimLevel = 100;
+          start = false;
         }
       }
     }
